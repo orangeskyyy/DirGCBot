@@ -85,8 +85,9 @@ if __name__ == '__main__':
     parser.add_argument('--num_proj_hidden', type=int, default=512)
     parser.add_argument('--test', action='store_true', default=False)
     parser.add_argument('--num_epochs', type=int, default=100)
-    parser.add_argument('--path', type=str, default='')
 
+    parser.add_argument('--path', type=str, default='')
+    parser.add_argument('--dataset', type=str, default='Cresci-2015')
     parser.add_argument("--linear_channels", type=int, default=128)
     parser.add_argument("--num_edge_type", type=int, default=2)
     parser.add_argument("--in_channel", type=int, default=128)
@@ -119,6 +120,7 @@ if __name__ == '__main__':
     weight_decay = args.wd
     weight_decay2 = args.wd2
     path = args.path
+    dataset = args.dataset
 
     num_edge_type = args.num_edge_type
     in_channel = args.in_channel
