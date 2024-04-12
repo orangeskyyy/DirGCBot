@@ -17,3 +17,6 @@
 
 ![image](https://github.com/orangeskyyy/DirGCBot/assets/46984272/39b1462a-cd1a-455b-88d0-b649983beb9f)
 图片来自于MGTAB论文的实验数据，可以忽略立场检测的数据
+
+
+--path E:\论文\code\DirGCBot\datasets\Cresci-2015 --lr 5e-4 --tau 0.2 --dfr1 0.4 --dfr2 0.4 --der1 0.0 --der2 0.4
