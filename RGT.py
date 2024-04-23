@@ -32,6 +32,7 @@ class RGTDetector(pl.LightningModule):
         self.RGT_layer1 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
                                    out_channels=args.out_channels,
                                    trans_head=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
+        # input = 128  output = 128
         self.RGT_layer2 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
                                    out_channels=args.out_channels,
                                    trans_head=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)

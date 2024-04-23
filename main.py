@@ -43,7 +43,7 @@ def build_args():
     pretrain = parser.add_mutually_exclusive_group()
     pretrain.add_argument("--pretrain", action="store_true")
     pretrain.add_argument("--no-pretrain", action="store_true")
-
+    parser.add_argument("--pretrain_load", action="store_true")
     return parser.parse_args()
 
 
@@ -90,20 +90,48 @@ if __name__ == "__main__":
         save_top_k=1,
         verbose=True)
 
-    train_loader = NeighborLoader(dataset, num_neighbors=[32],input_nodes=dataset.train_idx, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    # train_loader = NeighborLoader(dataset, num_neighbors=[32],input_nodes=dataset.train_idx, batch_size=args.batch_size, shuffle=True, num_workers=2)
     # train_loader = DataLoader(dataset,  batch_size=args.batch_size,shuffle=True, num_workers=2)
-    valid_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.valid_idx, batch_size=args.batch_size, persistent_workers=True,shuffle=True, num_workers=2)
+    # valid_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.valid_idx, batch_size=args.batch_size, persistent_workers=True,shuffle=True, num_workers=2)
+    #
+    # test_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.test_idx, batch_size=args.test_batch_size, persistent_workers=True, shuffle=True, num_workers=2)
 
-    test_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.test_idx, batch_size=args.test_batch_size, persistent_workers=True, shuffle=True, num_workers=2)
+    if args.pretrain:
+        print("Pretraining...")
+        train_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.train_idx,
+                                      batch_size=args.batch_size, shuffle=True, num_workers=2)
+        # train_loader = DataLoader(dataset,  batch_size=args.batch_size,shuffle=True, num_workers=2)
+        valid_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.valid_idx,
+                                      batch_size=args.batch_size, persistent_workers=True,  num_workers=2)
 
+        test_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.test_idx,
+                                     batch_size=args.test_batch_size, persistent_workers=True,
+                                     num_workers=2)
+        trainer = pl.Trainer(accelerator=args.accelerator, max_epochs=args.epochs, precision='16-mixed',
+                             log_every_n_steps=1, num_nodes=1)
+
+        model = RGTDetector(args, pretrain=True)
+        trainer.fit(model, train_loader)
+        torch.save(model.state_dict(),"pretrain_model")
     # valid_dataset = BotDataset(name="valid",path=args.path)
     # test_dataset = BotDataset(name="test",path=args.path)
     # valid_loader = DataLoader(valid_dataset, batch_size=1)
     # test_loader = DataLoader(test_dataset, batch_size=1)
+    print("Finetuning...")
+    print("loading data...")
+    train_loader = NeighborLoader(dataset, num_neighbors=[32],input_nodes=dataset.train_idx,
+                                  batch_size=args.batch_size, shuffle=True, num_workers=2)
 
-    trainer = pl.Trainer(accelerator=args.accelerator, max_epochs=args.epochs, precision='16-mixed', log_every_n_steps=1, num_nodes=1, callbacks=[fine_checkpoint_callback])
+    valid_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.valid_idx,
+                                  batch_size=args.batch_size, persistent_workers=True,shuffle=True, num_workers=2)
+
+    test_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.test_idx,
+                                 batch_size=args.test_batch_size, persistent_workers=True, shuffle=True, num_workers=2)
+
     model = RGTDetector(args)
-
+    if args.pretrain or args.pretrain_load:
+        model.load_state_dict(torch.load("pretrain_model"))
+    trainer = pl.Trainer(accelerator=args.accelerator, max_epochs=args.epochs, precision='16-mixed', log_every_n_steps=1, num_nodes=1, callbacks=[fine_checkpoint_callback])
     trainer.fit(model, train_loader, valid_loader)
     dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
     best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
