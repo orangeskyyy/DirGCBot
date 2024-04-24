@@ -9,7 +9,6 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
     roc_auc_score, mean_squared_error
 from os import listdir
 import globals
-from Dataset import BotDataset
 from RGT import RGTDetector
 import numpy as np
 import random

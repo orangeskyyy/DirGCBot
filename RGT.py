@@ -6,7 +6,8 @@ import torch
 import globals
 import numpy as np
 from torch.optim.lr_scheduler import CosineAnnealingLR
-
+import GCL.augmentors as A
+from contrasts import DualBranchContrast_ex
 
 class RGTDetector(pl.LightningModule):
     def __init__(self, args,pretrain=False):
@@ -32,11 +33,11 @@ class RGTDetector(pl.LightningModule):
         self.RGT_layer1 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
                                    out_channels=args.out_channels,
                                    trans_head=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
-        # input = 128  output = 128
+        # linear_channels = 128  out_channels = 128
         self.RGT_layer2 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
                                    out_channels=args.out_channels,
                                    trans_head=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
-
+        # user_channel=64
         self.out = torch.nn.Linear(args.out_channels, args.user_channel)
         self.classifier = torch.nn.Linear(args.user_channel, 2)
 
@@ -45,6 +46,7 @@ class RGTDetector(pl.LightningModule):
         self.ReLU = nn.LeakyReLU()
 
         self.init_weight()
+        self.contrastive = DualBranchContrast_ex()
 
     def init_weight(self):
         for m in self.modules():
@@ -77,7 +79,14 @@ class RGTDetector(pl.LightningModule):
         user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
         user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
         if self.pretrain:
-            pass
+
+            aug1 = A.Compose([A.EdgeRemoving(pe=0.3), A.FeatureMasking(pf=0.3)])
+            aug2 = A.Compose([A.EdgeRemoving(pe=0.3), A.FeatureMasking(pf=0.3)])
+            x1, edge_index1, edge_weight1 = aug1(user_features, edge_index,edge_type)
+            x2, edge_index2, edge_weight2 = aug2(user_features, edge_index, edge_type)
+            h1 = self.encoder(x1,edge_index1,edge_weight1)
+            h2 = self.encoder(x2,edge_index2,edge_weight2)
+            return self.contrastive(h1, h2)
         else:
 
             user_features = self.drop(self.ReLU(self.out(user_features)))
@@ -85,6 +94,13 @@ class RGTDetector(pl.LightningModule):
             pred = self.classifier(user_features)
             loss = self.CELoss(pred, label)
             return loss
+
+    def encoder(self,x,edge_index,edge_type):
+        x = self.drop(self.ReLU(self.user_linear(x)))
+        x = self.ReLU(self.RGT_layer1(x, edge_index, edge_type))
+        x = self.ReLU(self.RGT_layer2(x, edge_index, edge_type))
+        x = self.drop(self.ReLU(self.out(x)))
+        return x
 
     def validation_step(self, val_batch, batch_idx):
         self.eval()
