@@ -12,11 +12,13 @@
      - train_idx 训练集
      - valid_idx 校验集
      - test_idx 测试集
-2. 对比学习和RGT融合的效果还是不好
-3. SeGA的模型中的pytorch_lightning的训练写法和数据预处理的代码可以参考
+2. SeGA的模型中的pytorch_lightning的训练写法和数据预处理的代码可以参考
 
 ![image](https://github.com/orangeskyyy/DirGCBot/assets/46984272/39b1462a-cd1a-455b-88d0-b649983beb9f)
 图片来自于MGTAB论文的实验数据，可以忽略立场检测的数据
 
+执行预训练
+```python main.py --pretrain```
 
---path E:\论文\code\DirGCBot\datasets\Cresci-2015 --lr 5e-4 --tau 0.2 --dfr1 0.4 --dfr2 0.4 --der1 0.0 --der2 0.4
+加载预训练模型并执行微调
+```python main.py --pretrain_load```
