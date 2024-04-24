@@ -19,7 +19,8 @@ import json
 def build_args():
     parser = argparse.ArgumentParser(
         description="Reproduction of Heterogeneity-aware Bot detection with Relational Graph Transformers")
-    parser.add_argument("--path", type=str, default="E:/论文/datasets/processed_data/TwiBot-20/", help="dataset path Cresci-15 TwiBot-20")
+    parser.add_argument("--path", type=str, default="E:/论文/datasets/processed_data/Cresci-15/", help="dataset path Cresci-15 TwiBot-20")
+    parser.add_argument("--dataset", type=str,default='Cresci-15')
     parser.add_argument("--linear_channels", type=int, default=128, help="linear channel")
     parser.add_argument("--user_channel", type=int, default=64, help="user channel")
     parser.add_argument("--user_numeric_num", type=int, default=5, help="numerical feature channel")
@@ -111,7 +112,7 @@ if __name__ == "__main__":
 
         model = RGTDetector(args, pretrain=True)
         trainer.fit(model, train_loader)
-        torch.save(model.state_dict(),"pretrain_model")
+        torch.save(model.state_dict(),"{}_pretrain_model".format(args.dataset))
     # valid_dataset = BotDataset(name="valid",path=args.path)
     # test_dataset = BotDataset(name="test",path=args.path)
     # valid_loader = DataLoader(valid_dataset, batch_size=1)
@@ -129,7 +130,7 @@ if __name__ == "__main__":
 
     model = RGTDetector(args)
     if args.pretrain or args.pretrain_load:
-        model.load_state_dict(torch.load("pretrain_model"))
+        model.load_state_dict(torch.load("{}_pretrain_model".format(args.dataset)))
     trainer = pl.Trainer(accelerator=args.accelerator, max_epochs=args.epochs, precision='16-mixed', log_every_n_steps=1, num_nodes=1, callbacks=[fine_checkpoint_callback])
     trainer.fit(model, train_loader, valid_loader)
     dir = './lightning_logs/version_{}/checkpoints/'.format(trainer.logger.version)
