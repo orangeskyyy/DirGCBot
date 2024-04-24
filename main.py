@@ -24,7 +24,7 @@ def build_args():
     parser.add_argument("--linear_channels", type=int, default=128, help="linear channel")
     parser.add_argument("--user_channel", type=int, default=64, help="user channel")
     parser.add_argument("--user_numeric_num", type=int, default=5, help="numerical feature channel")
-    parser.add_argument("--user_cat_num", type=int, default=3, help="TwiBot=3 ,Cresci-15=1 categorical features channel")
+    parser.add_argument("--user_cat_num", type=int, default=1, help="TwiBot=3 ,Cresci-15=1 categorical features channel")
     parser.add_argument("--user_des_channel", type=int, default=768, help="description channel")
     parser.add_argument("--user_tweet_channel", type=int, default=768, help="tweet channel")
     parser.add_argument("--out_channels", type=int, default=128, help="output channel")
@@ -55,6 +55,7 @@ def load_data(path):
     user_des_features = torch.load(path + "des_tensor.pt", map_location='cpu')
     print("user_des_features",user_des_features)
     # user_x = torch.cat((user_cat_features, user_prop_features, user_tweet_features, user_des_features), dim=1)
+    # TwiBot20输入数据需要切片处理
     user_x = torch.cat((user_cat_features, user_prop_features, user_tweet_features, user_des_features), dim=1)[:11826]
     label = torch.load(path + "label.pt", map_location='cpu')
     edge_index = torch.load(path + "edge_index.pt", map_location='cpu')

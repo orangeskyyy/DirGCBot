@@ -32,11 +32,11 @@ class RGTDetector(pl.LightningModule):
 
         self.RGT_layer1 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
                                    out_channels=args.out_channels,
-                                   trans_head=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
+                                   trans_heads=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
         # linear_channels = 128  out_channels = 128
         self.RGT_layer2 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
                                    out_channels=args.out_channels,
-                                   trans_head=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
+                                   trans_heads=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
         # user_channel=64
         self.out = torch.nn.Linear(args.out_channels, args.user_channel)
         self.classifier = torch.nn.Linear(args.user_channel, 2)
