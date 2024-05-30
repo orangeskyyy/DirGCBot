@@ -6,7 +6,7 @@ import numpy as np
 import random
 import torch_geometric
 import os
-from torch_geometric.nn import TransformerConv
+from torch_geometric.nn import TransformerConv,DirGNNConv
 
 def masked_edge_index(edge_index, edge_mask):
     return edge_index[:, edge_mask]
@@ -64,7 +64,7 @@ class RGTLayer(torch.nn.Module):
         self.transformer_list = torch.nn.ModuleList()
         # self.transformer_list.append(TransformerConv(in_channels=in_channels, out_channels=out_channels, heads=trans_heads, dropout=dropout, concat=False))
         for i in range(int(num_edge_type)):
-            self.transformer_list.append(TransformerConv(in_channels=in_channels, out_channels=out_channels, heads=trans_heads, dropout=dropout, concat=False))
+            self.transformer_list.append(DirGNNConv(TransformerConv(in_channels=in_channels, out_channels=out_channels, heads=trans_heads, dropout=dropout, concat=False)))
         self.gate = torch.nn.Sequential(
             torch.nn.Linear(in_channels + out_channels, in_channels),
             torch.nn.Sigmoid()
