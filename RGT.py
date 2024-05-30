@@ -23,11 +23,16 @@ class RGTDetector(pl.LightningModule):
         self.user_cat_num = args.user_cat_num
         self.user_des_channel = args.user_des_channel
         self.user_tweet_channel = args.user_tweet_channel
-
+        self.dataset = args.dataset
         self.user_in_linear_numeric = nn.Linear(args.user_numeric_num, int(args.linear_channels / 4), bias=True)
         self.user_in_linear_bool = nn.Linear(args.user_cat_num, int(args.linear_channels / 4), bias=True)
         self.user_in_linear_des = nn.Linear(args.user_des_channel, int(args.linear_channels / 4), bias=True)
         self.user_in_linear_tweet = nn.Linear(args.user_tweet_channel, int(args.linear_channels / 4), bias=True)
+
+        self.mgtab_user_in_linear_numeric = nn.Linear(args.user_numeric_num, int(args.linear_channels / 4), bias=True)
+        self.mgtab_user_in_linear_bool = nn.Linear(args.user_cat_num, int(args.linear_channels / 4), bias=True)
+        self.mgtab_user_in_linear_tweet = nn.Linear(args.user_tweet_channel, int(args.linear_channels / 2), bias=True)
+
         self.user_linear = nn.Linear(args.linear_channels, args.linear_channels)
 
         self.RGT_layer1 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
@@ -56,26 +61,36 @@ class RGTDetector(pl.LightningModule):
                     m.bias.data.fill_(0.0)
 
     def training_step(self, train_batch, batch_idx):
-        cat_features = train_batch.x[:, :self.user_cat_num]
-        prop_features = train_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
-        tweet_features = train_batch.x[:,
-                         self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
-        des_features = train_batch.x[:,
-                       self.user_cat_num + self.user_numeric_num + self.user_tweet_channel: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel + self.user_des_channel]
+        if self.dataset in ["Cresci-15","TwiBot-20"]:
+            cat_features = train_batch.x[:, :self.user_cat_num]
+            prop_features = train_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
+            tweet_features = train_batch.x[:,
+                             self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
+            des_features = train_batch.x[:,
+                           self.user_cat_num + self.user_numeric_num + self.user_tweet_channel: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel + self.user_des_channel]
+            user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
+            user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
+            user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
+            user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
+            user_features = torch.cat(
+                (user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
+                dim=1)
+        else:
+            cat_features = train_batch.x[:, :self.user_cat_num]
+            prop_features = train_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
+            tweet_features = train_batch.x[:,
+                             self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
+            user_features_numeric = self.drop(self.ReLU(self.mgtab_user_in_linear_numeric(prop_features)))
+            user_features_bool = self.drop(self.ReLU(self.mgtab_user_in_linear_bool(cat_features)))
+            user_features_tweet = self.drop(self.ReLU(self.mgtab_user_in_linear_tweet(tweet_features)))
+            user_features = torch.cat((user_features_numeric, user_features_bool, user_features_tweet),
+                                  dim=1)
+
+        user_features = self.drop(self.ReLU(self.user_linear(user_features)))
         label = train_batch.y
 
         edge_index = train_batch.edge_index
         edge_type = train_batch.edge_attr.view(-1)
-
-        user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
-        user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
-        user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
-        user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
-
-        user_features = torch.cat((user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
-                                  dim=1)
-        user_features = self.drop(self.ReLU(self.user_linear(user_features)))
-
         user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
         user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
         if self.pretrain:
@@ -105,28 +120,34 @@ class RGTDetector(pl.LightningModule):
     def validation_step(self, val_batch, batch_idx):
         self.eval()
         with torch.no_grad():
-
-            cat_features = val_batch.x[:, :self.user_cat_num]
-            prop_features = val_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
-            tweet_features = val_batch.x[:,
-                             self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
-            des_features =val_batch.x[:,
-                           self.user_cat_num + self.user_numeric_num + self.user_tweet_channel: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel + self.user_des_channel]
-
+            if self.dataset in ["Cresci-15", "TwiBot-20"]:
+                cat_features = val_batch.x[:, :self.user_cat_num]
+                prop_features = val_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
+                tweet_features = val_batch.x[:,
+                                 self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
+                des_features = val_batch.x[:,
+                               self.user_cat_num + self.user_numeric_num + self.user_tweet_channel: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel + self.user_des_channel]
+                user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
+                user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
+                user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
+                user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
+                user_features = torch.cat(
+                    (user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
+                    dim=1)
+            else:
+                cat_features = val_batch.x[:, :self.user_cat_num]
+                prop_features = val_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
+                tweet_features = val_batch.x[:,
+                                 self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
+                user_features_numeric = self.drop(self.ReLU(self.mgtab_user_in_linear_numeric(prop_features)))
+                user_features_bool = self.drop(self.ReLU(self.mgtab_user_in_linear_bool(cat_features)))
+                user_features_tweet = self.drop(self.ReLU(self.mgtab_user_in_linear_tweet(tweet_features)))
+                user_features = torch.cat((user_features_numeric, user_features_bool, user_features_tweet),
+                                          dim=1)
+            user_features = self.drop(self.ReLU(self.user_linear(user_features)))
 
             edge_index = val_batch.edge_index
             edge_type = val_batch.edge_attr.view(-1)
-
-            user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
-            user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
-            user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
-            user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
-
-            user_features = torch.cat(
-                (user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
-                dim=1)
-            user_features = self.drop(self.ReLU(self.user_linear(user_features)))
-
 
             user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
             user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
@@ -167,25 +188,34 @@ class RGTDetector(pl.LightningModule):
     def test_step(self, test_batch, batch_id):
         self.eval()
         with torch.no_grad():
-            cat_features = test_batch.x[:, :self.user_cat_num]
-            prop_features = test_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
-            tweet_features = test_batch.x[:,
-                             self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
-            des_features = test_batch.x[:,
-                           self.user_cat_num + self.user_numeric_num + self.user_tweet_channel: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel + self.user_des_channel]
+            if self.dataset in ["Cresci-15", "TwiBot-20"]:
+                cat_features = test_batch.x[:, :self.user_cat_num]
+                prop_features = test_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
+                tweet_features = test_batch.x[:,
+                                 self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
+                des_features = test_batch.x[:,
+                               self.user_cat_num + self.user_numeric_num + self.user_tweet_channel: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel + self.user_des_channel]
+                user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
+                user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
+                user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
+                user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
+                user_features = torch.cat(
+                    (user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
+                    dim=1)
+            else:
+                cat_features = test_batch.x[:, :self.user_cat_num]
+                prop_features = test_batch.x[:, self.user_cat_num: self.user_cat_num + self.user_numeric_num]
+                tweet_features = test_batch.x[:,
+                                 self.user_cat_num + self.user_numeric_num: self.user_cat_num + self.user_numeric_num + self.user_tweet_channel]
+                user_features_numeric = self.drop(self.ReLU(self.mgtab_user_in_linear_numeric(prop_features)))
+                user_features_bool = self.drop(self.ReLU(self.mgtab_user_in_linear_bool(cat_features)))
+                user_features_tweet = self.drop(self.ReLU(self.mgtab_user_in_linear_tweet(tweet_features)))
+                user_features = torch.cat((user_features_numeric, user_features_bool, user_features_tweet),
+                                          dim=1)
             label = test_batch.y
 
             edge_index = test_batch.edge_index
             edge_type = test_batch.edge_attr.view(-1)
-
-            user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
-            user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
-            user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
-            user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
-
-            user_features = torch.cat(
-                (user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
-                dim=1)
             user_features = self.drop(self.ReLU(self.user_linear(user_features)))
 
             user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))

@@ -19,17 +19,17 @@ import json
 def build_args():
     parser = argparse.ArgumentParser(
         description="Reproduction of Heterogeneity-aware Bot detection with Relational Graph Transformers")
-    parser.add_argument("--path", type=str, default="E:/论文/datasets/processed_data/Cresci-15/", help="dataset path Cresci-15 TwiBot-20")
-    parser.add_argument("--dataset", type=str,default='Cresci-15')
+    parser.add_argument("--path", type=str, default="E:/论文/datasets/processed_data/MGTAB/", help="dataset path Cresci-15 TwiBot-20")
+    parser.add_argument("--dataset", type=str,default='MGTAB',help="Cresci-15 TwiBot-20 MGTAB")
     parser.add_argument("--linear_channels", type=int, default=128, help="linear channel")
     parser.add_argument("--user_channel", type=int, default=64, help="user channel")
-    parser.add_argument("--user_numeric_num", type=int, default=5, help="numerical feature channel")
-    parser.add_argument("--user_cat_num", type=int, default=1, help="TwiBot=3 ,Cresci-15=1 categorical features channel")
+    parser.add_argument("--user_numeric_num", type=int, default=10, help="TwiBot,Cresci-15=5 MGTAB=10")
+    parser.add_argument("--user_cat_num", type=int, default=10, help="TwiBot=3 Cresci-15=1 MGTAB=10")
     parser.add_argument("--user_des_channel", type=int, default=768, help="description channel")
     parser.add_argument("--user_tweet_channel", type=int, default=768, help="tweet channel")
     parser.add_argument("--out_channels", type=int, default=128, help="output channel")
     parser.add_argument("--dropout", type=float, default=0.5, help="dropout rate")
-    parser.add_argument("--edge_type", type=int, default=2, help="number of edge type")
+    parser.add_argument("--edge_type", type=int, default=7, help="MGTAB=7number of edge type")
     parser.add_argument("--trans_head", type=int, default=2, help="transformer head channel")
     parser.add_argument("--semantic_head", type=int, default=2, help="description channel")
     parser.add_argument("--batch_size", type=int, default=128, help="description channel")
@@ -46,24 +46,42 @@ def build_args():
     parser.add_argument("--pretrain_load", action="store_true")
     return parser.parse_args()
 
-
-def load_data(path):
+def split(num_samples,train_ratio=0.7,val_ratio=0.2):
+    train_size = int(num_samples * train_ratio)
+    val_size = int(num_samples * val_ratio)
+    test_size = num_samples - train_size - val_size
+    train_idx, val_idx, test_idx = torch.utils.data.random_split(
+        range(num_samples), [train_size, val_size, test_size]
+    )
+    return train_idx, val_idx, test_idx
+def load_data(path,dateset):
     print("loading user features...")
-    user_cat_features = torch.load(path + "cat_properties_tensor.pt", map_location='cpu')
-    user_prop_features = torch.load(path + "num_properties_tensor.pt", map_location='cpu')
-    user_tweet_features = torch.load(path + "tweets_tensor.pt", map_location='cpu')
-    user_des_features = torch.load(path + "des_tensor.pt", map_location='cpu')
-    print("user_des_features",user_des_features)
-    # user_x = torch.cat((user_cat_features, user_prop_features, user_tweet_features, user_des_features), dim=1)
-    # TwiBot20输入数据需要切片处理
-    user_x = torch.cat((user_cat_features, user_prop_features, user_tweet_features, user_des_features), dim=1)[:11826]
+    if dateset in ["Cresci-15", "TwiBot-20"]:
+        user_cat_features = torch.load(path + "cat_properties_tensor.pt", map_location='cpu')
+        user_prop_features = torch.load(path + "num_properties_tensor.pt", map_location='cpu')
+        user_tweet_features = torch.load(path + "tweets_tensor.pt", map_location='cpu')
+        user_des_features = torch.load(path + "des_tensor.pt", map_location='cpu')
+        if dateset == 'Cresci-15':
+            user_x = torch.cat((user_cat_features, user_prop_features, user_tweet_features, user_des_features), dim=1)
+        else:
+            # TwiBot20输入数据需要切片处理
+            user_x = torch.cat((user_cat_features, user_prop_features, user_tweet_features, user_des_features), dim=1)[:11826]
+    else:
+        user_cat_features = torch.load(path + "cat_properties_tensor.pt", map_location='cpu')
+        user_prop_features = torch.load(path + "num_properties_tensor.pt", map_location='cpu')
+        user_tweet_features = torch.load(path + "tweets_tensor.pt", map_location='cpu')
+        user_x = torch.cat((user_cat_features, user_prop_features, user_tweet_features), dim=1)
     label = torch.load(path + "label.pt", map_location='cpu')
     edge_index = torch.load(path + "edge_index.pt", map_location='cpu')
     edge_type = torch.load(path + "edge_type.pt", map_location='cpu').unsqueeze(-1)
     data = Data(x=user_x, edge_index=edge_index, edge_attr=edge_type, y=label)
-    data.train_idx = torch.load(path + "train_idx.pt", map_location='cpu')
-    data.valid_idx = torch.load(path + "val_idx.pt", map_location='cpu')
-    data.test_idx = torch.load(path + "test_idx.pt", map_location='cpu')
+    train_idx, val_idx, test_idx = split(user_x.size(0),0.1,0.1)
+    # data.train_idx = torch.load(path + "train_idx.pt", map_location='cpu')
+    # data.valid_idx = torch.load(path + "val_idx.pt", map_location='cpu')
+    # data.test_idx = torch.load(path + "test_idx.pt", map_location='cpu')
+    data.train_idx = train_idx
+    data.valid_idx = val_idx
+    data.test_idx = test_idx
     data.n_id = torch.arange(data.num_nodes)
     return data
 
@@ -80,7 +98,7 @@ if __name__ == "__main__":
         pl.seed_everything(args.random_seed)
 
     # load data
-    dataset = load_data(args.path)
+    dataset = load_data(args.path,args.dataset)
     print(dataset)
 
     # set callbacks
@@ -99,13 +117,13 @@ if __name__ == "__main__":
 
     if args.pretrain:
         print("Pretraining...")
-        train_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.train_idx,
+        train_loader = NeighborLoader(dataset, num_neighbors=[16], input_nodes=dataset.train_idx,
                                       batch_size=args.batch_size, shuffle=True, num_workers=2)
         # train_loader = DataLoader(dataset,  batch_size=args.batch_size,shuffle=True, num_workers=2)
-        valid_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.valid_idx,
+        valid_loader = NeighborLoader(dataset, num_neighbors=[16], input_nodes=dataset.valid_idx,
                                       batch_size=args.batch_size, persistent_workers=True,  num_workers=2)
 
-        test_loader = NeighborLoader(dataset, num_neighbors=[32], input_nodes=dataset.test_idx,
+        test_loader = NeighborLoader(dataset, num_neighbors=[16], input_nodes=dataset.test_idx,
                                      batch_size=args.test_batch_size, persistent_workers=True,
                                      num_workers=2)
         trainer = pl.Trainer(accelerator=args.accelerator, max_epochs=args.epochs, precision='16-mixed',
@@ -113,7 +131,7 @@ if __name__ == "__main__":
 
         model = RGTDetector(args, pretrain=True)
         trainer.fit(model, train_loader)
-        torch.save(model.state_dict(),"{}_pretrain_model".format(args.dataset))
+        torch.save(model.state_dict(),"{}_pretrain_model_{}".format(args.dataset,trainer.logger.version))
     # valid_dataset = BotDataset(name="valid",path=args.path)
     # test_dataset = BotDataset(name="test",path=args.path)
     # valid_loader = DataLoader(valid_dataset, batch_size=1)
