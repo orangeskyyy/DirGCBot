@@ -1,5 +1,6 @@
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from layer import RGTLayer
+from torch_geometric.nn import GCNConv,GATConv
 import pytorch_lightning as pl
 from torch import nn
 import torch
@@ -7,6 +8,8 @@ import globals
 import numpy as np
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import GCL.augmentors as A
+from GCL.augmentors.augmentor import Graph
+from augment import CustomAugmentor
 from contrasts import DualBranchContrast_ex
 
 class RGTDetector(pl.LightningModule):
@@ -15,6 +18,12 @@ class RGTDetector(pl.LightningModule):
         self.lr = args.lr
         self.l2_reg = args.l2_reg
         self.device_name = args.device_name
+        self.alpha = args.alpha
+        self.beta = args.beta
+        self.pe = args.pe
+        self.pa = args.pa
+        self.pf = args.pf
+        self.model_name = args.model_name
         self.pretrain = pretrain
         self.batch_size = args.batch_size
         self.test_batch_size = args.test_batch_size
@@ -37,11 +46,18 @@ class RGTDetector(pl.LightningModule):
 
         self.RGT_layer1 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
                                    out_channels=args.out_channels,
-                                   trans_heads=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
+                                   trans_heads=args.trans_head, semantic_head=args.semantic_head,
+                                   dropout=args.dropout, beta=args.beta)
         # linear_channels = 128  out_channels = 128
         self.RGT_layer2 = RGTLayer(num_edge_type=args.edge_type, in_channels=args.linear_channels,
                                    out_channels=args.out_channels,
-                                   trans_heads=args.trans_head, semantic_head=args.semantic_head, dropout=args.dropout)
+                                   trans_heads=args.trans_head, semantic_head=args.semantic_head,
+                                   dropout=args.dropout, beta=args.beta)
+        self.GCN1 = GCNConv(args.linear_channels, args.out_channels)
+        self.GCN2 = GCNConv(args.linear_channels, args.out_channels)
+
+        self.GAT1 = GATConv(args.linear_channels, int(args.linear_channels / 4), heads=4)
+        self.GAT2 = GATConv(args.linear_channels, args.linear_channels)
         # user_channel=64
         self.out = torch.nn.Linear(args.out_channels, args.user_channel)
         self.classifier = torch.nn.Linear(args.user_channel, 2)
@@ -91,19 +107,38 @@ class RGTDetector(pl.LightningModule):
 
         edge_index = train_batch.edge_index
         edge_type = train_batch.edge_attr.view(-1)
-        user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
-        user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
+        # user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
+        # user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
         if self.pretrain:
+            augmentor = CustomAugmentor(pf=self.pf, pe=self.pe, pa=self.pa, device=self.device_name)
+            graph = Graph(x=user_features, edge_index=edge_index, edge_weights=edge_type)
+            aug1 = augmentor.augment(graph)
+            x1, edge_index1, edge_weight1 = aug1.x, aug1.edge_index, aug1.edge_weights
+            graph = Graph(x=user_features, edge_index=edge_index, edge_weights=edge_type)
+            aug2 = augmentor.augment(graph)
+            x2, edge_index2, edge_weight2 = aug2.x, aug2.edge_index, aug2.edge_weights
 
-            aug1 = A.Compose([A.EdgeRemoving(pe=0.3), A.FeatureMasking(pf=0.3)])
-            aug2 = A.Compose([A.EdgeRemoving(pe=0.3), A.FeatureMasking(pf=0.3)])
-            x1, edge_index1, edge_weight1 = aug1(user_features, edge_index,edge_type)
-            x2, edge_index2, edge_weight2 = aug2(user_features, edge_index, edge_type)
+            # aug1 = A.Compose([A.EdgeRemoving(pe=0.5), A.FeatureMasking(pf=0.5)])
+            # aug2 = A.Compose([A.EdgeRemoving(pe=0.5), A.FeatureMasking(pf=0.5)])
+            # x1, edge_index1, edge_weight1 = aug1(user_features, edge_index,edge_type)
+            # x2, edge_index2, edge_weight2 = aug2(user_features, edge_index, edge_type)
             h1 = self.encoder(x1,edge_index1,edge_weight1)
             h2 = self.encoder(x2,edge_index2,edge_weight2)
+            # user_features = self.drop(self.ReLU(self.out(user_features)))
+            # pred = self.classifier(user_features)
+            # ce_loss = self.CELoss(pred, label)
+            # return self.alpha*ce_loss + (1-self.alpha)*self.contrastive(h1, h2)
             return self.contrastive(h1, h2)
         else:
-
+            if self.model_name == 'DRGT':
+                user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
+                user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
+            elif self.model_name == 'GCN':
+                user_features = self.ReLU(self.GCN1(user_features, edge_index))
+                user_features = self.ReLU(self.GCN2(user_features, edge_index))
+            else:
+                user_features = self.ReLU(self.GAT1(user_features, edge_index))
+                user_features = self.ReLU(self.GAT2(user_features, edge_index))
             user_features = self.drop(self.ReLU(self.out(user_features)))
 
             pred = self.classifier(user_features)
@@ -112,8 +147,15 @@ class RGTDetector(pl.LightningModule):
 
     def encoder(self,x,edge_index,edge_type):
         x = self.drop(self.ReLU(self.user_linear(x)))
-        x = self.ReLU(self.RGT_layer1(x, edge_index, edge_type))
-        x = self.ReLU(self.RGT_layer2(x, edge_index, edge_type))
+        if self.model_name == 'DRGT':
+            x = self.ReLU(self.RGT_layer1(x, edge_index, edge_type))
+            x = self.ReLU(self.RGT_layer2(x, edge_index, edge_type))
+        elif self.model_name == 'GCN':
+            x = self.ReLU(self.GCN1(x, edge_index))
+            x = self.ReLU(self.GCN2(x, edge_index))
+        else:
+            x = self.ReLU(self.GAT1(x, edge_index))
+            x = self.ReLU(self.GAT2(x, edge_index))
         x = self.drop(self.ReLU(self.out(x)))
         return x
 
@@ -149,8 +191,15 @@ class RGTDetector(pl.LightningModule):
             edge_index = val_batch.edge_index
             edge_type = val_batch.edge_attr.view(-1)
 
-            user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
-            user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
+            if self.model_name == 'DRGT':
+                user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
+                user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
+            elif self.model_name == 'GCN':
+                user_features = self.ReLU(self.GCN1(user_features, edge_index))
+                user_features = self.ReLU(self.GCN2(user_features, edge_index))
+            else:
+                user_features = self.ReLU(self.GAT1(user_features, edge_index))
+                user_features = self.ReLU(self.GAT2(user_features, edge_index))
 
             user_features = self.drop(self.ReLU(self.out(user_features)))
             pred = self.classifier(user_features)
@@ -163,7 +212,7 @@ class RGTDetector(pl.LightningModule):
             self.log("val_acc", acc)
             self.log("val_f1", f1)
 
-            print("acc: {} f1: {}".format(acc, f1))
+            print("val_acc: {} val_f1: {}".format(acc, f1))
             # mask = torch.tensor(val_batch.n_id.clone().detach(),dtype=int,device=self.device_name)
             # label = label[mask]
             # # print(pred.size())
@@ -218,8 +267,15 @@ class RGTDetector(pl.LightningModule):
             edge_type = test_batch.edge_attr.view(-1)
             user_features = self.drop(self.ReLU(self.user_linear(user_features)))
 
-            user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
-            user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
+            if self.model_name == 'DRGT':
+                user_features = self.ReLU(self.RGT_layer1(user_features, edge_index, edge_type))
+                user_features = self.ReLU(self.RGT_layer2(user_features, edge_index, edge_type))
+            elif self.model_name == 'GCN':
+                user_features = self.ReLU(self.GCN1(user_features, edge_index))
+                user_features = self.ReLU(self.GCN2(user_features, edge_index))
+            else:
+                user_features = self.ReLU(self.GAT1(user_features, edge_index))
+                user_features = self.ReLU(self.GAT2(user_features, edge_index))
 
             user_features = self.drop(self.ReLU(self.out(user_features)))
             pred = self.classifier(user_features)

@@ -57,16 +57,17 @@ class SemanticAttention(torch.nn.Module):
         return output / self.num_head
 
 class RGTLayer(torch.nn.Module):
-    def __init__(self, num_edge_type, in_channels, out_channels, trans_heads, semantic_head, dropout):
+    def __init__(self, num_edge_type, in_channels, out_channels, trans_heads, semantic_head, dropout, beta):
         super(RGTLayer, self).__init__()
         
         self.num_edge_type = num_edge_type
         self.transformer_list = torch.nn.ModuleList()
         # self.transformer_list.append(TransformerConv(in_channels=in_channels, out_channels=out_channels, heads=trans_heads, dropout=dropout, concat=False))
         for i in range(int(num_edge_type)):
-            self.transformer_list.append(DirGNNConv(TransformerConv(in_channels=in_channels, out_channels=out_channels, heads=trans_heads, dropout=dropout, concat=False)))
+            self.transformer_list.append(DirGNNConv(TransformerConv(in_channels=in_channels, out_channels=out_channels, heads=trans_heads, dropout=dropout, concat=False),alpha=beta))
+            # self.transformer_list.append(TransformerConv(in_channels=in_channels, out_channels=out_channels, heads=trans_heads, dropout=dropout, concat=False))
         self.gate = torch.nn.Sequential(
-            torch.nn.Linear(in_channels + out_channels, in_channels),
+            torch.nn.Linear(in_channels + out_channels, out_channels),
             torch.nn.Sigmoid()
         )
         self.activation = torch.nn.ELU()
