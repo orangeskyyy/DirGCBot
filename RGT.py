@@ -33,10 +33,10 @@ class RGTDetector(pl.LightningModule):
         self.user_des_channel = args.user_des_channel
         self.user_tweet_channel = args.user_tweet_channel
         self.dataset = args.dataset
-        self.user_in_linear_numeric = nn.Linear(args.user_numeric_num, int(args.linear_channels / 4), bias=True)
-        self.user_in_linear_bool = nn.Linear(args.user_cat_num, int(args.linear_channels / 4), bias=True)
-        self.user_in_linear_des = nn.Linear(args.user_des_channel, int(args.linear_channels / 4), bias=True)
-        self.user_in_linear_tweet = nn.Linear(args.user_tweet_channel, int(args.linear_channels / 4), bias=True)
+        self.user_in_linear_numeric = nn.Linear(args.user_numeric_num, int(args.linear_channels / 3), bias=True)
+        self.user_in_linear_bool = nn.Linear(args.user_cat_num, int(args.linear_channels / 3), bias=True)
+        # self.user_in_linear_des = nn.Linear(args.user_des_channel, int(args.linear_channels / 3), bias=True)
+        self.user_in_linear_tweet = nn.Linear(args.user_tweet_channel, int(args.linear_channels / 3), bias=True)
 
         self.mgtab_user_in_linear_numeric = nn.Linear(args.user_numeric_num, int(args.linear_channels / 4), bias=True)
         self.mgtab_user_in_linear_bool = nn.Linear(args.user_cat_num, int(args.linear_channels / 4), bias=True)
@@ -87,9 +87,9 @@ class RGTDetector(pl.LightningModule):
             user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
             user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
             user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
-            user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
+            # user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
             user_features = torch.cat(
-                (user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
+                (user_features_numeric, user_features_bool, user_features_tweet),
                 dim=1)
         else:
             cat_features = train_batch.x[:, :self.user_cat_num]
@@ -172,9 +172,9 @@ class RGTDetector(pl.LightningModule):
                 user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
                 user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
                 user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
-                user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
+                # user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
                 user_features = torch.cat(
-                    (user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
+                    (user_features_numeric, user_features_bool, user_features_tweet),
                     dim=1)
             else:
                 cat_features = val_batch.x[:, :self.user_cat_num]
@@ -247,9 +247,9 @@ class RGTDetector(pl.LightningModule):
                 user_features_numeric = self.drop(self.ReLU(self.user_in_linear_numeric(prop_features)))
                 user_features_bool = self.drop(self.ReLU(self.user_in_linear_bool(cat_features)))
                 user_features_tweet = self.drop(self.ReLU(self.user_in_linear_tweet(tweet_features)))
-                user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
+                # user_features_des = self.drop(self.ReLU(self.user_in_linear_des(des_features)))
                 user_features = torch.cat(
-                    (user_features_numeric, user_features_bool, user_features_tweet, user_features_des),
+                    (user_features_numeric, user_features_bool, user_features_tweet),
                     dim=1)
             else:
                 cat_features = test_batch.x[:, :self.user_cat_num]

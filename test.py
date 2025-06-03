@@ -83,14 +83,16 @@ def get_split():
 if __name__ == '__main__':
     # file_load()
     # get_split()
-    train_ratio,val_ratio=0.8,0.1
     num_samples = 5301
-    train_size = int(num_samples * train_ratio)
-    val_size = int(num_samples * val_ratio)
-    test_size = num_samples - train_size - val_size
-    train_idx, val_idx, test_idx = torch.utils.data.random_split(
-        range(num_samples), [train_size, val_size, test_size]
-    )
+    indices = torch.randperm(num_samples)  # 随机排列
+
+    train_size = int(num_samples * 0.8)
+    val_size = int(num_samples * 0.1)
+
+    train_idx = indices[:train_size]
+    val_idx = indices[train_size: train_size + val_size]
+    test_idx = indices[train_size + val_size:]
     torch.save(train_idx,'E:\论文\datasets\processed_data\Cresci-15\\train_idx.pt')
     torch.save(val_idx,'E:\论文\datasets\processed_data\Cresci-15\\val_idx.pt')
-    torch.save(test_idx,'E:\论文\datasets\processed_data\Cresci-15\\train_idx.pt')
+    torch.save(test_idx,'E:\论文\datasets\processed_data\Cresci-15\\test_idx.pt')
+

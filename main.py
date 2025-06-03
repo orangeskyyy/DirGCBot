@@ -22,13 +22,13 @@ def build_args():
     parser.add_argument("--path", type=str, default="./dataset", help="dataset path Cresci-15 TwiBot-20")
     parser.add_argument("--dataset", type=str,default='Cresci-15',help="Cresci-15 TwiBot-20 MGTAB")
     parser.add_argument("--model_name", type=str,default='DRGT',help="消融实验的encoder模型名")
-    parser.add_argument("--linear_channels", type=int, default=128, help="linear channel")
+    parser.add_argument("--linear_channels", type=int, default=126, help="linear channel")
+    parser.add_argument("--out_channels", type=int, default=126, help="output channel")
     parser.add_argument("--user_channel", type=int, default=64, help="user channel")
     parser.add_argument("--user_numeric_num", type=int, default=5, help="TwiBot,Cresci-15=5 MGTAB=10")
     parser.add_argument("--user_cat_num", type=int, default=1, help="TwiBot=3 Cresci-15=1 MGTAB=10")
     parser.add_argument("--user_des_channel", type=int, default=768, help="description channel")
     parser.add_argument("--user_tweet_channel", type=int, default=768, help="tweet channel")
-    parser.add_argument("--out_channels", type=int, default=128, help="output channel")
     parser.add_argument("--dropout", type=float, default=0.5, help="dropout rate")
     parser.add_argument("--edge_type", type=int, default=2, help="MGTAB=7 number of edge type")
     parser.add_argument("--trans_head", type=int, default=4, help="transformer head channel")
@@ -43,9 +43,9 @@ def build_args():
     parser.add_argument("--accelerator", type=str, default='cuda')
     parser.add_argument("--device_name", type=str, default='cuda:0')
     parser.add_argument("--alpha",type=float,default=0.5,help="半监督损失函数权重")
-    parser.add_argument("--pe",type=float,default=0.3,help="边移除概率")
-    parser.add_argument("--pa",type=float,default=0.3,help="边增加概率")
-    parser.add_argument("--pf",type=float,default=0.5,help="属性掩盖概率")
+    parser.add_argument("--pe",type=float,default=0.1,help="边移除概率")
+    parser.add_argument("--pa",type=float,default=0.5,help="边增加概率")
+    parser.add_argument("--pf",type=float,default=0.1,help="属性掩盖概率")
     parser.add_argument("--beta",type=float,default=0.4,help="beta")
     pretrain = parser.add_mutually_exclusive_group()
     pretrain.add_argument("--pretrain", action="store_true")
@@ -54,14 +54,6 @@ def build_args():
 
     return parser.parse_args()
 
-def split(num_samples,train_ratio=0.8,val_ratio=0.1):
-    train_size = int(num_samples * train_ratio)
-    val_size = int(num_samples * val_ratio)
-    test_size = num_samples - train_size - val_size
-    train_idx, val_idx, test_idx = torch.utils.data.random_split(
-        range(num_samples), [train_size, val_size, test_size]
-    )
-    return train_idx, val_idx, test_idx
 def load_data(path,dateset):
     print("loading user features...")
     path = os.path.join(path,dateset) + '/'
@@ -135,11 +127,11 @@ if __name__ == "__main__":
         # train_loader = DataLoader(dataset,  batch_size=args.batch_size,shuffle=True, num_workers=2)
         valid_loader = NeighborLoader(dataset, num_neighbors=[16], input_nodes=dataset.valid_idx,
                                       batch_size=args.batch_size, persistent_workers=True,
-                                      shuffle=True,num_workers=2)
+                                      num_workers=2)
 
         test_loader = NeighborLoader(dataset, num_neighbors=[16], input_nodes=dataset.test_idx,
                                      batch_size=args.test_batch_size, persistent_workers=True,
-                                     shuffle=True,num_workers=2)
+                                     num_workers=2)
         model = RGTDetector(args, pretrain=True)
         trainer.fit(model, train_loader, valid_loader)
         # best_path = './lightning_logs/version_{}/checkpoints/{}'.format(trainer.logger.version, listdir(dir)[0])
